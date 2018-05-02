@@ -1,3 +1,13 @@
+---
+layout: post
+title: tornado
+date: 2018-04-30
+category: "tornado"
+tags: [jekyll, material design]
+author: Lambda
+comment: false
+---
+
 # Tornado Ioloop
 
 Tornado推荐采用单进程单线程的运行方式; 为了充分利用CPU时间片, 使用了非阻塞IO, 而底层的Ioloop则基于IO多路复用模型
