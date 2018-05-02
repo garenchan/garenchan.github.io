@@ -1,18 +1,14 @@
 ---
 layout: page
-title: About
+title: 关于
 permalink: /about/
 ---
 
-#### Tagline
+#### 个人简介
 
-Your tagline.
+小码畜一枚.
 
-#### Introduction
-
-Introduce yourself.
-
-#### This theme
+#### 网页主题
 
 This [jekyll](https://jekyllrb.com) theme is based on [materialize](http://materializecss.com). For more detail, you can view the github repo: [mumuxme/materialize-jekyll](https://github.com/mumuxme/materialize-jekyll)
 
@@ -29,6 +25,6 @@ As for all articles(except reference) are under [CC Attribution-ShareAlike 4.0 I
 
 - - -
 
-#### Personal information
+#### 个人信息
 
-Email: {{ site.email }}
+邮箱: {{ site.email }}
