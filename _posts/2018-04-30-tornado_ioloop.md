@@ -1,9 +1,9 @@
 ---
 layout: post
-title: tornado
+title: Tornado Ioloop学习
 date: 2018-04-30
-category: "tornado"
-tags: [jekyll, material design]
+category: "Tornado"
+tags: [Tornado]
 author: Lambda
 comment: false
 ---
