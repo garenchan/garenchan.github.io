@@ -3,7 +3,7 @@ layout: post
 title: Tornado Ioloop学习
 date: 2018-04-30
 category: "Tornado"
-tags: [Tornado]
+tags: [Web Server,Tornado]
 author: Lambda
 comment: false
 ---
@@ -207,6 +207,7 @@ Tornado推荐采用单进程单线程的运行方式; 为了充分利用CPU时�
             self._handlers = {}
             self._events = {}
             self._callbacks = collections.deque()
+            # 使用最小堆维护的定时器任务
             self._timeouts = []
             self._cancellations = 0
             self._running = False
@@ -217,11 +218,28 @@ Tornado推荐采用单进程单线程的运行方式; 为了充分利用CPU时�
             self._blocking_signal_threshold = None
             self._timeout_counter = itertools.count()
 
-            # _waker为管道, 用于向运行IoLoop的处于阻塞状态的线程发送消息, 以唤醒它
+            # _waker顾名思义为唤醒器, 用于向运行IoLoop的处于阻塞状态的线程发送消息, 以唤醒它;
+            # nt系统下是通过一对C/S socket实现的; posix系统则是通过pipe实现的
             self._waker = Waker()
             self.add_handler(self._waker.fileno(),
                              lambda fd, events: self._waker.consume(),
                              self.READ)
+        
+        def _run_callback(self, callback):
+            """对回调进行处理"""
+            
+            try:
+                ret = callback()
+                if ret is not None:
+                    from tornado import gen
+                    try:
+                        ret = gen.convert_yielded(ret)
+                    except gen.BadYieldError:
+                        pass
+                    else:
+                        self.add_future(ret, self._discard_future_result)
+            except Exception:
+                self.handle_callback_exception(callback)
     
         def start(self):
             """运行IoLoop的主循环"""
@@ -252,106 +270,125 @@ Tornado推荐采用单进程单线程的运行方式; 为了充分利用CPU时�
 
             old_wakeup_fd = None
             if hasattr(signal, 'set_wakeup_fd') and os.name == 'posix':
-                # requires python 2.6+, unix.  set_wakeup_fd exists but crashes
-                # the python process on windows.
+                # 只有在POSIX操作系统上时, 才会调用set_wakeup_fd接口, Windows系
+                # 统上会导致Python进程崩溃?
                 try:
+                    # set_wakeup_fd用于唤醒select或poll, 设置一个非阻塞的fd, 每
+                    # 当有信号到来时, 往该fd写入'\0', 返回值为先前设置的fd
                     old_wakeup_fd = signal.set_wakeup_fd(self._waker.write_fileno())
                     if old_wakeup_fd != -1:
-                        # Already set, restore previous value.  This is a little racy,
-                        # but there's no clean get_wakeup_fd and in real use the
-                        # IOLoop is just started once at the beginning.
+                        # 如果old_wakeup_fd不为-1, 表明之前已经通过set_wakeup_fd
+                        # 设置过fd, 进一步表明IoLoop可能已经开始, 所以进行恢复！
+                        # 主要是没有get_wakeup_fd类似的接口, 否则不会采取这样的
+                        # 实现形式
                         signal.set_wakeup_fd(old_wakeup_fd)
                         old_wakeup_fd = None
                 except ValueError:
-                    # Non-main thread, or the previous value of wakeup_fd
-                    # is no longer valid.
+                    # 非主线程或者先前设置的wakeup_fd已失效
                     old_wakeup_fd = None
 
             try:
                 while True:
-                    # Prevent IO event starvation by delaying new callbacks
-                    # to the next iteration of the event loop.
+                    # 这里用于记录此轮迭代要处理的回调个数,
+                    # 之后在处理回调和定时器任务时追加的回调会延迟到下一轮迭代
+                    # 中处理, 防止I/O事件被饿死
                     ncallbacks = len(self._callbacks)
 
-                    # Add any timeouts that have come due to the callback list.
-                    # Do not run anything until we have determined which ones
-                    # are ready, so timeouts that call add_timeout cannot
-                    # schedule anything in this iteration.
+                    # due_timeouts用于存放已超时的定时器任务
                     due_timeouts = []
                     if self._timeouts:
+                        # 如果_timeouts不为空, 即表明有已经注册的定时器任务
+                        
+                        # 获取当前时间
                         now = self.time()
                         while self._timeouts:
+                            # 定时器任务deadline越小优先级越高, 需要优先处理
+                            # 这里就是按照deadline从小到大的顺序遍历_timeouts
+                        
                             if self._timeouts[0].callback is None:
-                                # The timeout was cancelled.  Note that the
-                                # cancellation check is repeated below for timeouts
-                                # that are cancelled by another timeout or callback.
+                                # 如果定时器任务的callback为空, 即表明该定时器
+                                # 任务已被取消, 那么从最小堆中移除该定时器
+                                # 注:由于是最小堆, 那么_timeouts的第一个元素即为
+                                # 最小值, 所以heappop移除的正是该最小值
                                 heapq.heappop(self._timeouts)
+                                # _cancellations记录的是_timeouts中已取消的定时
+                                # 器任务个数, 移除后就需要减1
                                 self._cancellations -= 1
                             elif self._timeouts[0].deadline <= now:
+                                # 表明定时器任务已超时, 那么从_timeouts中移除并
+                                # 追加到due_timeouts中
                                 due_timeouts.append(heapq.heappop(self._timeouts))
                             else:
+                                # 如果当前定时器任务没有超时, 那么_timeouts中剩
+                                # 余的定时器任务肯定不会超时了, 退出遍历
                                 break
                         if (self._cancellations > 512 and
                                 self._cancellations > (len(self._timeouts) >> 1)):
                             # Clean up the timeout queue when it gets large and it's
                             # more than half cancellations.
+                            # 如果_timeouts中剩余的已取消的定时器任务个数超过512
+                            # 且超过_timeouts长度的一半, 那么说明_timeouts中有大
+                            # 量的无用元素, 这些无用元素会对最小堆的调整产生负面
+                            # 影响, 从而对IoLoop的性能造成影响, 因此需要移除这些
+                            # 无用元素, 并重新构造最小堆
                             self._cancellations = 0
                             self._timeouts = [x for x in self._timeouts
                                               if x.callback is not None]
                             heapq.heapify(self._timeouts)
-
+                    
+                    # 对前ncallbacks个回调进行处理
                     for i in range(ncallbacks):
                         self._run_callback(self._callbacks.popleft())
+                    # 对已经超时的定时器任务进行处理
                     for timeout in due_timeouts:
                         if timeout.callback is not None:
                             self._run_callback(timeout.callback)
-                    # Closures may be holding on to a lot of memory, so allow
-                    # them to be freed before we go into our poll wait.
+                    # 释放无用的内存
                     due_timeouts = timeout = None
 
+                    # 确定poll的超时时间
                     if self._callbacks:
-                        # If any callbacks or timeouts called add_callback,
-                        # we don't want to wait in poll() before we run them.
+                        # 如果回调队列不为空, 说明有很重要的事情需要处理,
+                        # 那么poll的超时时间为0, 即使用非阻塞的poll
                         poll_timeout = 0.0
                     elif self._timeouts:
-                        # If there are any timeouts, schedule the first one.
-                        # Use self.time() instead of 'now' to account for time
-                        # spent running callbacks.
+                        # 如果注册的定时器任务不为空, 那么为了避免定时器任务无
+                        # 法被及时处理, 设置poll的超时时间为定时器任务的最小deadline
+                        # 距离当前的时间, 另外这个时间不能超过_POLL_TIMEOUT
                         poll_timeout = self._timeouts[0].deadline - self.time()
                         poll_timeout = max(0, min(poll_timeout, _POLL_TIMEOUT))
                     else:
-                        # No timeouts and no callbacks, so use the default.
+                        # 如果回调队列为空且没有注册的定时器任务, 那么采用默认
+                        # 的poll超时时间_POLL_TIMEOUT
                         poll_timeout = _POLL_TIMEOUT
 
                     if not self._running:
+                        # 如果_running为False, 即表明IoLoop被停止
                         break
 
                     if self._blocking_signal_threshold is not None:
-                        # clear alarm so it doesn't fire while poll is waiting for
-                        # events.
+                        # _blocking_signal_threshold不为空, 即表明在poll期间清空
+                        # alarm以防止内核发送SIGALRM信号
                         signal.setitimer(signal.ITIMER_REAL, 0, 0)
 
                     try:
+                        # _impl可能为epoll、kqueue或者select等实现,
+                        # 这里进行轮询获取已产生的事件
                         event_pairs = self._impl.poll(poll_timeout)
                     except Exception as e:
-                        # Depending on python version and IOLoop implementation,
-                        # different exception types may be thrown and there are
-                        # two ways EINTR might be signaled:
-                        # * e.errno == errno.EINTR
-                        # * e.args is like (errno.EINTR, 'Interrupted system call')
+                        # 如果异常为EINTR, 那么表明poll使用的系统调用被信号中断,
+                        # 这样的异常是正常的; 其他异常则抛出
                         if errno_from_exception(e) == errno.EINTR:
                             continue
                         else:
                             raise
 
                     if self._blocking_signal_threshold is not None:
+                        # 恢复alarm
                         signal.setitimer(signal.ITIMER_REAL,
                                          self._blocking_signal_threshold, 0)
-
-                    # Pop one fd at a time from the set of pending fds and run
-                    # its handler. Since that handler may perform actions on
-                    # other file descriptors, there may be reentrant calls to
-                    # this IOLoop that modify self._events
+                    
+                    # 
                     self._events.update(event_pairs)
                     while self._events:
                         fd, events = self._events.popitem()
@@ -378,4 +415,5 @@ Tornado推荐采用单进程单线程的运行方式; 为了充分利用CPU时�
                 elif old_current is not self:
                     old_current.make_current()
                 if old_wakeup_fd is not None:
+                    # old_wakeup_fd为-1, 这里表示清空wakeup_fd
                     signal.set_wakeup_fd(old_wakeup_fd)
