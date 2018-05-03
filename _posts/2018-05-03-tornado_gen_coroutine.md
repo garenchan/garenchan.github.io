@@ -1,7 +1,7 @@
 ---
 layout: post
 title: 揭开Tornado gen.coroutine的神秘面纱
-date: 2018-04-30
+date: 2018-05-03
 category: "Tornado"
 tags: [Web Server,Tornado]
 author: Lambda
@@ -16,26 +16,26 @@ tornado.gen中提供了基于generator(生成器)的协程实现, 使得我们�
 
 
 ## 测试代码
+{% highlight py %}
+import tornado.gen
+import tornado.ioloop
 
-    import tornado.gen
-    import tornado.ioloop
+@tornado.gen.coroutine
+def my_sleep():
+    print("my_sleep start")
+    # sleep 10 seconds
+    yield tornado.gen.sleep(10)
+    print("my_sleep end")
 
-    @tornado.gen.coroutine
-    def my_sleep():
-        print("my_sleep start")
-        # sleep 10 seconds
-        yield tornado.gen.sleep(10)
-        print("my_sleep end")
+def hello():
+    print("hello world")
 
-    def hello():
-        print("hello world")
-
-    # 创建(获取)当前线程的Ioloop实例
-    loop = tornado.ioloop.IOLoop.current()
-    loop.add_callback(my_sleep)
-    loop.add_callback(hello)
-    loop.start()
-
+# 创建(获取)当前线程的Ioloop实例
+loop = tornado.ioloop.IOLoop.current()
+loop.add_callback(my_sleep)
+loop.add_callback(hello)
+loop.start()
+{% endhighlight %}
     
 ## 代码输出
 
