@@ -2,14 +2,14 @@
 
 author: garenchan
 email: 1412950785@qq.com
-twitter_username: twitter
+twitter_username: garenchan
 github_username:  garenchan
-googleplus_username: google
+googleplus_username: garenchan
 
 head-title: GarenChan's blog
 title: GarenChan's blog
 
-baseurl: "/"    # the subpath of your site, "/blog"
+baseurl: ""    # the subpath of your site, "/blog"
 url: ""
 
 # footer 

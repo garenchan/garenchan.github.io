@@ -15,7 +15,7 @@ Tornado推荐采用单进程单线程的运行方式; 为了充分利用CPU时�
 
 ## 测试代码
 
-{% highlight python %}
+{% highlight python linenos %}
 import tornado.ioloop
 
 def test():
@@ -31,7 +31,7 @@ loop.start()
 
 ## Ioloop创建过程
 
-{% highlight python %}
+{% highlight python linenos %}
 """tornado/ioloop.py"""
 import threading
 
@@ -149,7 +149,7 @@ class PollIOLoop(IOLoop):
 
 ## Ioloop注册回调函数
 
-{% highlight python %}
+{% highlight python linenos %}
 import collections
 
 class PollIOLoop(IOLoop):
@@ -198,7 +198,7 @@ class PollIOLoop(IOLoop):
 
 ## IoLoop主循环
 
-{% highlight python %}
+{% highlight python linenos %}
 class PollIOLoop(IOLoop):
 """基于轮询的IOLoop"""
 

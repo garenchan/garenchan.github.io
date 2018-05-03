@@ -17,7 +17,7 @@ tornado.gen中提供了基于generator(生成器)的协程实现, 使得我们�
 
 ## 测试代码
 
-{% highlight python %}
+{% highlight python linenos %}
 import tornado.gen
 import tornado.ioloop
 
@@ -60,20 +60,10 @@ loop.start()
 
 * 让我们看看tornado.gen.sleep做了什么:
 
-{% highlight python %}
+{% highlight python linenos %}
 """tornado/gen.py"""
 def sleep(duration):
-    """Return a `.Future` that resolves after the given number of seconds.
-    When used with ``yield`` in a coroutine, this is a non-blocking
-    analogue to `time.sleep` (which should not be used in coroutines
-    because it is blocking)::
-
-        yield gen.sleep(0.5)
-
-    Note that calling this function on its own does nothing; you must
-    wait on the `.Future` it returns (usually by yielding it).
-
-    .. versionadded:: 4.1
+    """
     """
     f = _create_future()
     IOLoop.current().call_later(duration,
