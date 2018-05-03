@@ -16,7 +16,8 @@ tornado.gen中提供了基于generator(生成器)的协程实现, 使得我们�
 
 
 ## 测试代码
-{% highlight py %}
+
+{% highlight python %}
 import tornado.gen
 import tornado.ioloop
 
@@ -36,7 +37,8 @@ loop.add_callback(my_sleep)
 loop.add_callback(hello)
 loop.start()
 {% endhighlight %}
-    
+
+
 ## 代码输出
 
     my_sleep start
@@ -58,7 +60,7 @@ loop.start()
 
 * 让我们看看tornado.gen.sleep做了什么:
 
-```
+{% highlight python %}
 """tornado/gen.py"""
 def sleep(duration):
     """Return a `.Future` that resolves after the given number of seconds.
@@ -77,4 +79,4 @@ def sleep(duration):
     IOLoop.current().call_later(duration,
                                 lambda: future_set_result_unless_cancelled(f, None))
     return f
-```
+{% endhighlight %}

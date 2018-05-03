@@ -15,7 +15,7 @@ Tornado推荐采用单进程单线程的运行方式; 为了充分利用CPU时�
 
 ## 测试代码
 
-```
+{% highlight python %}
 import tornado.ioloop
 
 def test():
@@ -26,12 +26,12 @@ def test():
 loop = tornado.ioloop.IOLoop.current()
 loop.add_callback(test)
 loop.start()
-```
+{% endhighlight %}
 
 
 ## Ioloop创建过程
 
-```
+{% highlight python %}
 """tornado/ioloop.py"""
 import threading
 
@@ -144,12 +144,12 @@ class PollIOLoop(IOLoop):
         # select在大部分系统中都得到了支持, 但是性能会弱于以上两者
         from tornado.platform.select import SelectIOLoop
         return SelectIOLoop
-```
+{% endhighlight %}
 
 
 ## Ioloop注册回调函数
 
-```
+{% highlight python %}
 import collections
 
 class PollIOLoop(IOLoop):
@@ -193,12 +193,12 @@ class PollIOLoop(IOLoop):
         else:
             # 如果当前线程就是运行此IoLoop的线程, 那么就没有必要进行唤醒操作了
             pass
-```
+{% endhighlight %}
 
 
 ## IoLoop主循环
 
-```
+{% highlight python %}
 class PollIOLoop(IOLoop):
 """基于轮询的IOLoop"""
 
@@ -443,4 +443,4 @@ class PollIOLoop(IOLoop):
             if old_wakeup_fd is not None:
                 # old_wakeup_fd不为None时只能为-1, 这里表示清空wakeup_fd
                 signal.set_wakeup_fd(old_wakeup_fd)
-```
+{% endhighlight %}
