@@ -288,6 +288,8 @@ Tornado推荐采用单进程单线程的运行方式; 为了充分利用CPU时�
                     old_wakeup_fd = None
 
             try:
+                # IoLoop的死循环, 以下内容和大部分基于事件的网络库/服务程序中
+                # 的死循环大同小异, 譬如Nginx、eventlet等
                 while True:
                     # 这里用于记录此轮迭代要处理的回调个数,
                     # 之后在处理回调和定时器任务时追加的回调会延迟到下一轮迭代
@@ -388,32 +390,50 @@ Tornado推荐采用单进程单线程的运行方式; 为了充分利用CPU时�
                         signal.setitimer(signal.ITIMER_REAL,
                                          self._blocking_signal_threshold, 0)
                     
-                    # 
+                    # 使用_events来记录产生的事件?
+                    # 猜测是: 兼容使用边沿触发的情况, 避免事件丢失
                     self._events.update(event_pairs)
+                    # 对产生的事件进行遍历和处理
                     while self._events:
                         fd, events = self._events.popitem()
                         try:
+                            # _handlers作为字典, 记录了注册的fd->fd_obj,handler_func
+                            # 的映射关系, handler_func就是事件处理函数, fd_obj
+                            # 就是fd对应的file-like对象, 譬如socket对象; fd只是
+                            # 个整型数据, 通常我们的事件处理函数不会面向它
                             fd_obj, handler_func = self._handlers[fd]
+                            # 使用注册的事件处理函数对fd_obj上产生的events事件
+                            # 进行处理
                             handler_func(fd_obj, events)
                         except (OSError, IOError) as e:
                             if errno_from_exception(e) == errno.EPIPE:
-                                # Happens when the client closes the connection
+                                # 当客户端关闭连接时
                                 pass
                             else:
+                                # 对事件处理函数产生的异常进行处理
                                 self.handle_callback_exception(self._handlers.get(fd))
                         except Exception:
                             self.handle_callback_exception(self._handlers.get(fd))
+                    # 设置fd_obj和handler_func为None, 使其原来引用的对象的ref_count
+                    # 减1, 促使其能尽早被GC回收以释放占用的内存空间
                     fd_obj = handler_func = None
 
             finally:
-                # reset the stopped flag so another start/stop pair can be issued
+                # 退出死循环后
+                
+                # 置_stopped为False, 那么另一对start/stop操作可以发起
                 self._stopped = False
                 if self._blocking_signal_threshold is not None:
+                    # 清空alarm
                     signal.setitimer(signal.ITIMER_REAL, 0, 0)
+                    
                 if old_current is None:
+                    # 如果old_current为None, 那么直接clear_current即可
                     IOLoop.clear_current()
                 elif old_current is not self:
+                    # 如果old_current不为空且不是自己, 那么说明在运行之前有另一
+                    # 个IoLoop实例已经占据了current位置, 在运行之后需要进行恢复
                     old_current.make_current()
                 if old_wakeup_fd is not None:
-                    # old_wakeup_fd为-1, 这里表示清空wakeup_fd
+                    # old_wakeup_fd不为None时只能为-1, 这里表示清空wakeup_fd
                     signal.set_wakeup_fd(old_wakeup_fd)
